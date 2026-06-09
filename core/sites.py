@@ -1,0 +1,151 @@
+import dataclasses
+import json
+import subprocess
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Optional
+
+from core.bench import bench_exe
+
+
+@dataclass
+class SiteInfo:
+    name: str
+    bench: str
+    installed_apps: list = field(default_factory=list)
+    db_name: str = ""
+    db_type: str = "mariadb"
+
+    def to_dict(self) -> dict:
+        return dataclasses.asdict(self)
+
+
+def list_sites(bench_path: Path) -> list[SiteInfo]:
+    sites_dir = bench_path / "sites"
+    if not sites_dir.exists():
+        return []
+    result = []
+    for d in sorted(sites_dir.iterdir()):
+        config_file = d / "site_config.json"
+        if d.is_dir() and not d.name.startswith(".") and config_file.exists():
+            result.append(get_site_info(bench_path, d.name))
+    return result
+
+
+def get_site_info(bench_path: Path, site_name: str) -> SiteInfo:
+    config_file = bench_path / "sites" / site_name / "site_config.json"
+    apps_txt = bench_path / "sites" / site_name / "apps.txt"
+
+    db_name = ""
+    db_type = "mariadb"
+    if config_file.exists():
+        try:
+            cfg = json.loads(config_file.read_text())
+            db_name = cfg.get("db_name", "")
+            db_type = cfg.get("db_type", "mariadb")
+        except Exception:
+            pass
+
+    apps: list[str] = []
+    if apps_txt.exists():
+        apps = [a.strip() for a in apps_txt.read_text().splitlines() if a.strip()]
+
+    return SiteInfo(
+        name=site_name,
+        bench=bench_path.name,
+        installed_apps=apps,
+        db_name=db_name,
+        db_type=db_type,
+    )
+
+
+def create_site_process(
+    bench_path: Path,
+    site_name: str,
+    admin_password: str,
+    db_name: Optional[str] = None,
+    db_root_password: Optional[str] = None,
+) -> subprocess.Popen:
+    exe = bench_exe(bench_path)
+    cmd = [exe, "new-site", site_name, f"--admin-password={admin_password}"]
+    if db_name:
+        cmd += [f"--db-name={db_name}"]
+    if db_root_password:
+        cmd += [f"--mariadb-root-password={db_root_password}"]
+
+    return subprocess.Popen(
+        cmd,
+        cwd=str(bench_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+
+def drop_site(bench_path: Path, site_name: str, force: bool = True) -> dict:
+    exe = bench_exe(bench_path)
+    cmd = [exe, "drop-site", site_name]
+    if force:
+        cmd.append("--force")
+    result = subprocess.run(cmd, cwd=str(bench_path), capture_output=True, text=True)
+    if result.returncode == 0:
+        return {"success": True}
+    return {"success": False, "error": result.stderr or result.stdout}
+
+
+def migrate_site_process(bench_path: Path, site_name: str) -> subprocess.Popen:
+    exe = bench_exe(bench_path)
+    return subprocess.Popen(
+        [exe, "--site", site_name, "migrate"],
+        cwd=str(bench_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+
+def install_app_process(bench_path: Path, site_name: str, app_name: str) -> subprocess.Popen:
+    exe = bench_exe(bench_path)
+    return subprocess.Popen(
+        [exe, "--site", site_name, "install-app", app_name],
+        cwd=str(bench_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+
+def backup_site_process(bench_path: Path, site_name: str, with_files: bool = False) -> subprocess.Popen:
+    exe = bench_exe(bench_path)
+    cmd = [exe, "--site", site_name, "backup"]
+    if with_files:
+        cmd.append("--with-files")
+    return subprocess.Popen(
+        cmd,
+        cwd=str(bench_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+
+def list_site_backups(bench_path: Path, site_name: str) -> list[dict]:
+    """Return list of backup files sorted newest first."""
+    backup_dir = bench_path / "sites" / site_name / "private" / "backups"
+    if not backup_dir.exists():
+        return []
+    files = sorted(backup_dir.iterdir(), key=lambda f: f.stat().st_mtime, reverse=True)
+    result = []
+    for f in files:
+        if f.is_file():
+            stat = f.stat()
+            result.append({
+                "filename": f.name,
+                "size": stat.st_size,
+                "modified": stat.st_mtime,
+            })
+    return result
