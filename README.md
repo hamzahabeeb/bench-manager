@@ -2,7 +2,9 @@
 
 A lightweight web UI for managing multiple [Frappe](https://frappeframework.com) bench instances on a single server.
 
-![Dashboard](<img width="1456" height="825" alt="image" src="https://github.com/user-attachments/assets/d53887f9-38df-4fa2-a123-10eb4080eae4" />)
+![Dashboard]
+<img width="1456" height="825" alt="image" src="https://github.com/user-attachments/assets/b3857880-867f-4e89-b92c-7588e01647ff" />
+
 
 ## Features
 
