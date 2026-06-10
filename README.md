@@ -27,7 +27,7 @@ A lightweight web UI for managing multiple [Frappe](https://frappeframework.com)
 ## Quick start
 
 ```bash
-git clone https://github.com/your-username/bench-manager
+git clone https://github.com/hamzahabeeb/bench-manager
 cd bench-manager
 
 # edit the config (add the folder in which all your benches are present in line with BENCH_MANAGER_BENCH_ROOT)
