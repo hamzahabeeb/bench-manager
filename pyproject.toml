@@ -25,4 +25,43 @@ build-backend = "hatchling.build"
 packages = ["."]
 
 [dependency-groups]
-dev = []
+dev = [
+    "pyright>=1.1.410",
+    "ruff>=0.15.16",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "RUF", # ruff-specific
+]
+ignore = [
+    "B008", # FastAPI uses function calls in default arguments
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "core", "routers"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pyright]
+pythonVersion = "3.11"
+pythonPlatform = "Linux"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+include = ["main.py", "config.py", "core", "routers"]
+exclude = ["frontend", ".venv"]
+reportMissingImports = true
+reportMissingTypeStubs = false
