@@ -2,6 +2,7 @@ import dataclasses
 import json
 import platform
 import re
+import shlex
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -84,9 +85,7 @@ def create_site_process(
     )
 
 
-def drop_site(
-    bench_path: Path, site_name: str, force: bool = True, root_password: str = ""
-) -> dict:
+def drop_site(bench_path: Path, site_name: str, force: bool = True, root_password: str = "") -> dict:
     exe = bench_exe(bench_path)
     cmd = [exe, "drop-site", site_name]
     if force:
@@ -136,9 +135,7 @@ def install_app_process(bench_path: Path, site_name: str, app_name: str) -> subp
     )
 
 
-def backup_site_process(
-    bench_path: Path, site_name: str, with_files: bool = False
-) -> subprocess.Popen:
+def backup_site_process(bench_path: Path, site_name: str, with_files: bool = False) -> subprocess.Popen:
     exe = bench_exe(bench_path)
     cmd = [exe, "--site", site_name, "backup"]
     if with_files:
@@ -176,11 +173,19 @@ def restore_site_process(
     )
 
 
+def _validate_site_name(site_name: str) -> str:
+    name = site_name.strip().lower()
+    name = re.sub(r"[^a-z0-9\-.]", "", name)
+    if not name:
+        raise ValueError(f"Invalid site name: {site_name!r}")
+    return name
+
+
 def is_in_hosts(site_name: str) -> bool:
     try:
         for line in Path("/etc/hosts").read_text().splitlines():
             parts = line.split()
-            if len(parts) >= 2 and parts[0] == "127.0.0.1" and site_name in parts[1:]:
+            if len(parts) >= 2 and parts[0] in ("127.0.0.1", "::1") and site_name in parts[1:]:
                 return True
         return False
     except Exception:
@@ -188,22 +193,24 @@ def is_in_hosts(site_name: str) -> bool:
 
 
 def add_to_hosts(site_name: str) -> dict:
-    hosts_line = f"127.0.0.1 {site_name}"
     try:
+        site_name = _validate_site_name(site_name)
         if is_in_hosts(site_name):
             return {"success": True, "already_exists": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+    hosts_entry = f"\n127.0.0.1\t{site_name}\n::1\t{site_name}\n"
     result = subprocess.run(
         ["sudo", "-n", "tee", "-a", "/etc/hosts"],
-        input=f"\n{hosts_line}\n",
+        input=hosts_entry,
         capture_output=True,
         text=True,
     )
     if result.returncode == 0:
         return {"success": True}
-    sudo_cmd = f"printf '\\n127.0.0.1 {site_name}\\n' | sudo tee -a /etc/hosts"
+    quoted = shlex.quote(site_name)
+    sudo_cmd = f"printf '\\n127.0.0.1\\t{quoted}\\n::1\\t{quoted}\\n' | sudo tee -a /etc/hosts > /dev/null"
     return {
         "success": False,
         "error": "Add to hosts requires superuser access. Run the command below in a terminal.",
@@ -212,18 +219,19 @@ def add_to_hosts(site_name: str) -> dict:
 
 
 def remove_from_hosts(site_name: str) -> dict:
-    hosts_line = f"127.0.0.1 {site_name}"
     try:
+        site_name = _validate_site_name(site_name)
         if not is_in_hosts(site_name):
             return {"success": True, "not_found": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-    pattern = re.escape(f"127.0.0.1 {site_name}")
+    pattern = re.escape(site_name)
+    sed_pattern = f"/^(127\\.0\\.0\\.1|::1)[[:space:]]+{pattern}([[:space:]]|$)/d"
     if platform.system() == "Darwin":
-        cmd = ["sudo", "-n", "sed", "-i", "", f"/{pattern}/d", "/etc/hosts"]
+        cmd = ["sudo", "-n", "sed", "-i", "", "-E", sed_pattern, "/etc/hosts"]
     else:
-        cmd = ["sudo", "-n", "sed", "-i", f"/{pattern}/d", "/etc/hosts"]
+        cmd = ["sudo", "-n", "sed", "-i", "-E", sed_pattern, "/etc/hosts"]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode == 0:
