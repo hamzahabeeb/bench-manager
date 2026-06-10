@@ -4,16 +4,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Create venv if missing
-if [ ! -d ".venv" ]; then
-  echo "Creating virtual environment..."
-  python3 -m venv .venv
-fi
-
-source .venv/bin/activate
-
-# Install/upgrade dependencies
-pip install -q -r requirements.txt
+# Sync dependencies via uv (creates .venv automatically)
+uv sync
 
 # Copy .env if not present
 if [ ! -f ".env" ] && [ -f ".env.example" ]; then
@@ -28,4 +20,4 @@ echo "  Frontend dev: cd frontend && npm install && npm run dev"
 echo "  Frontend build: cd frontend && npm run build"
 echo ""
 
-python main.py
+uv run python main.py
