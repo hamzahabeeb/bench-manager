@@ -30,7 +30,7 @@ A lightweight web UI for managing multiple [Frappe](https://frappeframework.com)
 git clone https://github.com/hamzahabeeb/bench-manager
 cd bench-manager
 
-# edit the config (add the folder in which all your benches are present in line with BENCH_MANAGER_BENCH_ROOT)
+# edit the config (add the folder under which all your benches are present in line with BENCH_MANAGER_BENCH_ROOT)
 nano .env
 
 # Start the server (creates venv and installs deps automatically)
