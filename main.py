@@ -33,10 +33,11 @@ if _DIST.exists():
             return FileResponse(str(candidate))
         return FileResponse(str(_DIST / "index.html"))
 else:
+
     @app.get("/", include_in_schema=False)
     async def dev_root():
         return JSONResponse(
-            {"message": "Bench Manager API running. Start the frontend dev server: cd frontend && npm run dev"},
+            {"message": "Bench Manager API running. Frontend dev: cd frontend && npm run dev"},
             status_code=200,
         )
 

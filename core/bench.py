@@ -1,11 +1,10 @@
+import json
 import os
 import shutil
 import signal
-import json
 import subprocess
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
 
 import psutil
 
@@ -19,6 +18,7 @@ _PID_FILE = Path(settings.bench_root) / ".bench_manager_pids.json"
 # ---------------------------------------------------------------------------
 # Persistence helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_pids() -> dict:
     if _PID_FILE.exists():
@@ -37,6 +37,7 @@ def _save_pids() -> None:
 # ---------------------------------------------------------------------------
 # Bench discovery
 # ---------------------------------------------------------------------------
+
 
 def is_bench_dir(path: Path) -> bool:
     return (
@@ -123,10 +124,7 @@ def _get_apps(bench_path: Path) -> list[str]:
     apps_dir = bench_path / "apps"
     if not apps_dir.exists():
         return []
-    return sorted(
-        d.name for d in apps_dir.iterdir()
-        if d.is_dir() and not d.name.startswith(".")
-    )
+    return sorted(d.name for d in apps_dir.iterdir() if d.is_dir() and not d.name.startswith("."))
 
 
 def _get_sites(bench_path: Path) -> list[str]:
@@ -134,7 +132,8 @@ def _get_sites(bench_path: Path) -> list[str]:
     if not sites_dir.exists():
         return []
     return sorted(
-        d.name for d in sites_dir.iterdir()
+        d.name
+        for d in sites_dir.iterdir()
         if d.is_dir()
         and not d.name.startswith(".")
         and d.name not in ("assets",)
@@ -180,7 +179,7 @@ def _get_frappe_version(bench_path: Path) -> str:
     return ""
 
 
-def _process_running(bench_path: Path, extra_pid: Optional[int] = None) -> bool:
+def _process_running(bench_path: Path, extra_pid: int | None = None) -> bool:
     if extra_pid:
         try:
             p = psutil.Process(extra_pid)
@@ -238,19 +237,16 @@ def discover_benches() -> list[BenchInfo]:
     root = Path(settings.bench_root)
     if not root.exists():
         return []
-    return [
-        get_bench_info(p)
-        for p in sorted(root.iterdir())
-        if is_bench_dir(p)
-    ]
+    return [get_bench_info(p) for p in sorted(root.iterdir()) if is_bench_dir(p)]
 
 
 # ---------------------------------------------------------------------------
 # Lifecycle
 # ---------------------------------------------------------------------------
 
+
 def _kill_bench_processes(bench_path: Path, sig: signal.Signals) -> bool:
-    """Send `sig` to all processes associated with this bench. Returns True if anything was killed."""
+    """Send `sig` to all processes in this bench. Returns True if anything was killed."""
     bench_str = str(bench_path)
     killed = False
     for p in psutil.process_iter(["pid", "cwd", "cmdline"]):
@@ -260,9 +256,9 @@ def _kill_bench_processes(bench_path: Path, sig: signal.Signals) -> bool:
             # Match any process whose cwd is inside this bench dir
             if not cwd.startswith(bench_str):
                 continue
-            if any(kw in cmdline for kw in (
-                "honcho", "gunicorn", "frappe", "redis-server", "node"
-            )):
+            if any(
+                kw in cmdline for kw in ("honcho", "gunicorn", "frappe", "redis-server", "node")
+            ):
                 p.send_signal(sig)
                 killed = True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -273,6 +269,7 @@ def _kill_bench_processes(bench_path: Path, sig: signal.Signals) -> bool:
 def _get_redis_ports(bench_path: Path) -> list[int]:
     """Read Redis ports from the bench config files."""
     import re
+
     ports = []
     for conf in (bench_path / "config").glob("redis_*.conf"):
         try:
@@ -287,7 +284,9 @@ def _get_redis_ports(bench_path: Path) -> list[int]:
 
 def _wait_port_free(port: int, timeout: float = 8.0) -> bool:
     """Block until the port is no longer in use, or timeout expires."""
-    import socket, time
+    import socket
+    import time
+
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -298,7 +297,7 @@ def _wait_port_free(port: int, timeout: float = 8.0) -> bool:
     return False  # timed out
 
 
-def _honcho_exe(bench_path: Path) -> Optional[str]:
+def _honcho_exe(bench_path: Path) -> str | None:
     """Return the honcho executable, searching bench env, PATH, and ~/Library/Python."""
     candidates: list[Path] = [
         bench_path / "env" / "bin" / "honcho",
@@ -326,7 +325,7 @@ def _honcho_exe(bench_path: Path) -> Optional[str]:
     return found if found else None
 
 
-def _pip_for_bench(bench_path: Path) -> Optional[str]:
+def _pip_for_bench(bench_path: Path) -> str | None:
     """Find the pip that corresponds to this bench's Python environment."""
     # 1. Bench's own virtualenv pip
     local_pip = bench_path / "env" / "bin" / "pip"
@@ -359,7 +358,8 @@ def install_honcho(bench_name: str) -> dict:
 
     result = subprocess.run(
         [pip, "install", "honcho"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode == 0:
         return {"success": True}
@@ -367,7 +367,9 @@ def install_honcho(bench_name: str) -> dict:
 
 
 def start_bench(bench_name: str) -> dict:
-    import time, tempfile
+    import tempfile
+    import time
+
     bench_path = Path(settings.bench_root) / bench_name
     if not is_bench_dir(bench_path):
         return {"success": False, "error": "Not a valid bench directory"}
@@ -385,8 +387,7 @@ def start_bench(bench_name: str) -> dict:
         return {
             "success": False,
             "error": (
-                "honcho is not installed. "
-                "Click 'Install honcho' below, then try starting again."
+                "honcho is not installed. Click 'Install honcho' below, then try starting again."
             ),
             "missing_honcho": True,
         }
@@ -396,12 +397,12 @@ def start_bench(bench_name: str) -> dict:
     launch_env = os.environ.copy()
     extra_paths: list[str] = []
     try:
-        extra_paths.append(str(Path(exe).parent))       # dir containing bench binary
+        extra_paths.append(str(Path(exe).parent))  # dir containing bench binary
     except Exception:
         pass
     venv_bin = bench_path / "env" / "bin"
     if venv_bin.exists():
-        extra_paths.append(str(venv_bin))               # bench's own virtualenv
+        extra_paths.append(str(venv_bin))  # bench's own virtualenv
     if extra_paths:
         launch_env["PATH"] = ":".join(extra_paths) + ":" + launch_env.get("PATH", "")
 
@@ -429,9 +430,9 @@ def start_bench(bench_name: str) -> dict:
         _save_pids()
         try:
             error_detail = Path(stderr_file.name).read_text().strip()
-            lines = [l.strip() for l in error_detail.splitlines() if l.strip()]
+            lines = [line.strip() for line in error_detail.splitlines() if line.strip()]
             noise = ("INFO:", "WARNING:", "NotOpenSSLWarning", "warn(", "site-packages")
-            clean = [l for l in lines if not any(n in l for n in noise)]
+            clean = [line for line in lines if not any(n in line for n in noise)]
             # Return up to last 5 meaningful lines so the UI shows full context
             error_msg = "\n".join(clean[-5:]) if clean else f"exited with code {proc.returncode}"
         except Exception:
@@ -445,7 +446,6 @@ def start_bench(bench_name: str) -> dict:
 
 
 def stop_bench(bench_name: str) -> dict:
-    import time
     bench_path = Path(settings.bench_root) / bench_name
     port = _get_port(bench_path)
 
@@ -473,7 +473,7 @@ def stop_bench(bench_name: str) -> dict:
         connections = []
     for conn in connections:
         try:
-            if conn.laddr.port in all_ports and conn.status == "LISTEN" and conn.pid:
+            if conn.laddr.port in all_ports and conn.status == "LISTEN" and conn.pid:  # type: ignore[union-attr]
                 psutil.Process(conn.pid).kill()
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
@@ -515,7 +515,9 @@ def create_bench_process(name: str, frappe_branch: str = "version-15") -> subpro
     )
 
 
-def build_bench_process(bench_name: str, app: Optional[str] = None, force: bool = False) -> subprocess.Popen:
+def build_bench_process(
+    bench_name: str, app: str | None = None, force: bool = False
+) -> subprocess.Popen:
     bench_path = Path(settings.bench_root) / bench_name
     exe = bench_exe(bench_path)
     cmd = [exe, "build"]
