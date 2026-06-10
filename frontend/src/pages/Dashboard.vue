@@ -72,7 +72,8 @@
           type="select"
           v-model="newBench.frappe_branch"
           :options="[
-            { label: 'version-15 (latest stable)', value: 'version-15' },
+            { label: 'version-16 (latest stable)', value: 'version-16' },
+            { label: 'version-15', value: 'version-15' },
             { label: 'version-14', value: 'version-14' },
             { label: 'version-13', value: 'version-13' },
             { label: 'develop (unstable)', value: 'develop' },
@@ -129,7 +130,7 @@ const showJobDialog = ref(false)
 
 const newBench = ref({
   bench_name: '',
-  frappe_branch: 'version-15',
+  frappe_branch: 'version-16',
 })
 
 let refreshTimer = null
@@ -170,7 +171,7 @@ async function handleCreateBench() {
     showJobDialog.value = true
     showNewBenchDialog.value = false
     newBench.value.bench_name = ''
-    newBench.value.frappe_branch = 'version-15'
+    newBench.value.frappe_branch = 'version-16'
   } catch (e) {
     fetchError.value = e.message
   } finally {

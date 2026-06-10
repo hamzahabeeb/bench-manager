@@ -83,12 +83,27 @@ def create_site_process(
     )
 
 
-def drop_site(bench_path: Path, site_name: str, force: bool = True) -> dict:
+def drop_site(bench_path: Path, site_name: str, force: bool = True, root_password: str = "") -> dict:
     exe = bench_exe(bench_path)
     cmd = [exe, "drop-site", site_name]
     if force:
         cmd.append("--force")
+    if root_password:
+        cmd += ["--root-password", root_password]
     result = subprocess.run(cmd, cwd=str(bench_path), capture_output=True, text=True)
+    if result.returncode == 0:
+        return {"success": True}
+    return {"success": False, "error": result.stderr or result.stdout}
+
+
+def use_site(bench_path: Path, site_name: str) -> dict:
+    exe = bench_exe(bench_path)
+    result = subprocess.run(
+        [exe, "use", site_name],
+        cwd=str(bench_path),
+        capture_output=True,
+        text=True,
+    )
     if result.returncode == 0:
         return {"success": True}
     return {"success": False, "error": result.stderr or result.stdout}
@@ -123,6 +138,29 @@ def backup_site_process(bench_path: Path, site_name: str, with_files: bool = Fal
     cmd = [exe, "--site", site_name, "backup"]
     if with_files:
         cmd.append("--with-files")
+    return subprocess.Popen(
+        cmd,
+        cwd=str(bench_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+
+def restore_site_process(
+    bench_path: Path,
+    site_name: str,
+    sql_file: str,
+    with_public_files: Optional[str] = None,
+    with_private_files: Optional[str] = None,
+) -> subprocess.Popen:
+    exe = bench_exe(bench_path)
+    cmd = [exe, "--site", site_name, "restore", sql_file]
+    if with_public_files:
+        cmd += ["--with-public-files", with_public_files]
+    if with_private_files:
+        cmd += ["--with-private-files", with_private_files]
     return subprocess.Popen(
         cmd,
         cwd=str(bench_path),

@@ -62,6 +62,14 @@
           </button>
           <Button
             variant="ghost"
+            size="sm"
+            label="Build"
+            icon-left="package"
+            :disabled="!!actionLoading"
+            @click="openBuildDialog"
+          />
+          <Button
+            variant="ghost"
             icon="refresh-cw"
             :loading="loading"
             @click="fetchBench"
@@ -113,6 +121,11 @@
       </div>
 
       <div class="p-4">
+        <!-- Build job output (shown above tabs when active) -->
+        <div v-if="buildJobId" class="mb-4">
+          <JobOutput :job-id="buildJobId" :title="buildJobTitle" @done="buildJobId = null" />
+        </div>
+
         <!-- Sites tab -->
         <div v-show="activeTab === 'sites'">
           <SiteList :bench-name="bench.name" :sites="sites" @refresh="fetchBench" />
@@ -139,17 +152,55 @@
         <div v-show="activeTab === 'logs'">
           <LogViewer :bench-name="bench.name" initial-log-type="web" />
         </div>
+
+        <!-- Terminal tab -->
+        <div v-if="activeTab === 'terminal'">
+          <CommandRunner :bench-name="bench.name" />
+        </div>
       </div>
     </div>
   </div>
+  <!-- Build Dialog -->
+  <Dialog
+    v-model="showBuildDialog"
+    :options="{ title: `Build: ${bench?.name}`, size: 'sm' }"
+  >
+    <template #body-content>
+      <form @submit.prevent="handleBuild" class="flex flex-col gap-3">
+        <div>
+          <label class="block text-xs font-medium text-ink-gray-6 mb-1.5">
+            App
+            <span class="font-normal text-ink-gray-3 ml-1">(leave blank to build all)</span>
+          </label>
+          <select
+            v-model="buildApp"
+            class="w-full px-3 py-2 rounded border border-outline-gray-2 bg-surface-gray-1 text-sm text-ink-gray-7 focus:outline-none focus:border-outline-blue-1"
+          >
+            <option value="">All apps</option>
+            <option v-for="app in bench?.apps" :key="app" :value="app">{{ app }}</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" v-model="buildForce" class="rounded" />
+          <span class="text-sm text-ink-gray-6">Force rebuild (--force)</span>
+        </label>
+        <div class="flex justify-end gap-2 pt-1">
+          <Button variant="ghost" size="sm" label="Cancel" @click="showBuildDialog = false" />
+          <Button type="submit" size="sm" label="Build" :loading="actionLoading === 'build'" />
+        </div>
+      </form>
+    </template>
+  </Dialog>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Button, LoadingIndicator } from 'frappe-ui'
+import { Button, Dialog, LoadingIndicator } from 'frappe-ui'
+import JobOutput from '../components/JobOutput.vue'
 import BenchStatusBadge from '../components/BenchStatusBadge.vue'
 import SiteList from '../components/SiteList.vue'
 import LogViewer from '../components/LogViewer.vue'
+import CommandRunner from '../components/CommandRunner.vue'
 
 const props = defineProps({
   name: { type: String, required: true },
@@ -163,11 +214,17 @@ const activeTab = ref('sites')
 const actionLoading = ref(null)
 const actionError = ref('')
 const missingHoncho = ref(false)
+const showBuildDialog = ref(false)
+const buildApp = ref('')
+const buildForce = ref(false)
+const buildJobId = ref(null)
+const buildJobTitle = ref('')
 
 const tabs = computed(() => [
   { id: 'sites', label: 'Sites', count: sites.value.length },
   { id: 'apps', label: 'Apps', count: bench.value?.apps?.length ?? 0 },
   { id: 'logs', label: 'Logs' },
+  { id: 'terminal', label: 'Terminal' },
 ])
 
 async function fetchBench() {
@@ -232,6 +289,32 @@ async function handleInstallHoncho() {
     } else {
       actionError.value = data.message || 'Install failed'
     }
+  } catch (e) {
+    actionError.value = e.message
+  } finally {
+    actionLoading.value = null
+  }
+}
+
+function openBuildDialog() {
+  buildApp.value = ''
+  buildForce.value = false
+  showBuildDialog.value = true
+}
+
+async function handleBuild() {
+  actionLoading.value = 'build'
+  actionError.value = ''
+  showBuildDialog.value = false
+  try {
+    const body = new FormData()
+    body.append('app', buildApp.value)
+    body.append('force', buildForce.value ? 'true' : 'false')
+    const res = await fetch(`/api/benches/${props.name}/build`, { method: 'POST', body })
+    const data = await res.json()
+    if (!res.ok) { actionError.value = data.detail || 'Build failed'; return }
+    buildJobTitle.value = buildApp.value ? `Building: ${buildApp.value}` : 'Building all apps'
+    buildJobId.value = data.job_id
   } catch (e) {
     actionError.value = e.message
   } finally {

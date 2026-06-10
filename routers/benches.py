@@ -7,6 +7,8 @@ from config import settings
 from core.bench import (
     BenchInfo,
     _get_port,
+    bench_exec_process,
+    build_bench_process,
     create_bench_process,
     delete_bench,
     discover_benches,
@@ -86,6 +88,30 @@ async def bench_delete(bench_name: str):
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result.get("error", "Delete failed"))
     return {"success": True}
+
+
+@router.post("/{bench_name}/exec")
+async def bench_exec(bench_name: str, command: str = Form(...)):
+    bench_path = Path(settings.bench_root) / bench_name
+    if not is_bench_dir(bench_path):
+        raise HTTPException(status_code=404, detail="Bench not found")
+    proc = bench_exec_process(bench_name, command)
+    job_id = register_job(proc)
+    return {"job_id": job_id}
+
+
+@router.post("/{bench_name}/build")
+async def bench_build(
+    bench_name: str,
+    app: str = Form(""),
+    force: bool = Form(False),
+):
+    bench_path = Path(settings.bench_root) / bench_name
+    if not is_bench_dir(bench_path):
+        raise HTTPException(status_code=404, detail="Bench not found")
+    proc = build_bench_process(bench_name, app=app or None, force=force)
+    job_id = register_job(proc)
+    return {"job_id": job_id}
 
 
 @router.post("/{bench_name}/install-honcho")

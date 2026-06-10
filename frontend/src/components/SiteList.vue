@@ -44,6 +44,14 @@
           <Button
             variant="ghost"
             size="sm"
+            :label="useStates[site.name] === 'done' ? '✓ Active' : 'Use'"
+            :loading="useStates[site.name] === 'using'"
+            :disabled="!!siteActions[site.name] || !!useStates[site.name]"
+            @click="handleUse(site)"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
             label="Migrate"
             :loading="siteActions[site.name] === 'migrate'"
             :disabled="!!siteActions[site.name]"
@@ -62,6 +70,13 @@
             label="Backup"
             :disabled="!!siteActions[site.name]"
             @click="handleBackup(site)"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            label="Restore"
+            :disabled="!!siteActions[site.name]"
+            @click="openRestoreDialog(site)"
           />
           <Button
             theme="red"
@@ -95,7 +110,7 @@
         <FormControl label="Site Name" v-model="newSite.site_name" placeholder="mysite.localhost" :required="true" autocomplete="off" />
         <FormControl label="Admin Password" type="password" v-model="newSite.admin_password" placeholder="••••••••" :required="true" />
         <FormControl label="DB Name (optional)" v-model="newSite.db_name" placeholder="Auto-generated" />
-        <FormControl label="MariaDB Root Password (optional)" type="password" v-model="newSite.db_root_password" placeholder="••••••••" />
+        <FormControl label="MariaDB Root Password" type="password" v-model="newSite.db_root_password" placeholder="••••••••" :required="true" />
         <div class="flex justify-end gap-2 pt-2">
           <Button variant="ghost" size="sm" label="Cancel" @click="showNewSiteDialog = false" />
           <Button type="submit" size="sm" label="Create Site" :loading="createLoading" />
@@ -123,21 +138,38 @@
   <!-- Drop confirmation dialog -->
   <Dialog
     v-model="showDropDialog"
-    :options="{
-      title: 'Drop site?',
-      icon: { name: 'trash-2', appearance: 'danger' },
-      message: dropTarget ? `This will permanently drop ${dropTarget.name} and its database. This cannot be undone.` : '',
-      actions: [
-        {
-          label: 'Drop',
-          theme: 'red',
-          variant: 'solid',
-          loading: dropTarget && siteActions[dropTarget.name] === 'drop',
-          onClick: ({ close }) => handleDrop(close),
-        },
-      ],
-    }"
-  />
+    :options="{ title: 'Drop site?', size: 'sm' }"
+  >
+    <template #body-content>
+      <form @submit.prevent="handleDrop" class="flex flex-col gap-3">
+        <p class="text-sm text-ink-gray-6">
+          This will permanently drop
+          <span class="font-semibold font-mono text-ink-gray-8">{{ dropTarget?.name }}</span>
+          and its database. This cannot be undone.
+        </p>
+        <FormControl
+          label="MariaDB Root Password"
+          type="password"
+          v-model="dropRootPassword"
+          placeholder="••••••••"
+          :required="true"
+          autocomplete="off"
+        />
+        <p v-if="dropError" class="text-xs text-ink-red-4">{{ dropError }}</p>
+        <div class="flex justify-end gap-2 pt-1">
+          <Button variant="ghost" size="sm" label="Cancel" @click="showDropDialog = false" />
+          <Button
+            type="submit"
+            theme="red"
+            variant="solid"
+            size="sm"
+            label="Drop Site"
+            :loading="dropTarget && siteActions[dropTarget.name] === 'drop'"
+          />
+        </div>
+      </form>
+    </template>
+  </Dialog>
 
   <!-- Backup Dialog -->
   <Dialog
@@ -177,6 +209,95 @@
       </div>
     </template>
   </Dialog>
+  <!-- Restore Dialog -->
+  <Dialog
+    v-model="showRestoreDialog"
+    :options="{ title: restoreTarget ? `Restore: ${restoreTarget.name}` : 'Restore Site', size: 'md' }"
+  >
+    <template #body-content>
+      <div class="flex flex-col gap-4">
+        <!-- Job output while restoring -->
+        <JobOutput
+          v-if="restoreJobId"
+          :job-id="restoreJobId"
+          title="Restoring site..."
+          @done="onRestoreJobDone"
+        />
+
+        <!-- Upload form (shown before job starts) -->
+        <form v-if="!restoreJobId" @submit.prevent="handleRestore" class="flex flex-col gap-4">
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-6 mb-1.5">
+              Database Backup <span class="text-ink-red-3">*</span>
+              <span class="font-normal text-ink-gray-3 ml-1">(.sql.gz)</span>
+            </label>
+            <label class="file-upload-label" :class="{ 'file-selected': !!restoreSqlFile }">
+              <input
+                type="file"
+                accept=".gz,.sql.gz,.sql"
+                class="hidden"
+                @change="e => restoreSqlFile = e.target.files[0] || null"
+              />
+              <span class="file-upload-icon">↑</span>
+              <span class="truncate">{{ restoreSqlFile ? restoreSqlFile.name : 'Click to select SQL backup file' }}</span>
+            </label>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-6 mb-1.5">
+              Public Files
+              <span class="font-normal text-ink-gray-3 ml-1">(optional, .tar)</span>
+            </label>
+            <label class="file-upload-label" :class="{ 'file-selected': !!restorePublicFile }">
+              <input
+                type="file"
+                accept=".tar,.tar.gz,.tgz"
+                class="hidden"
+                @change="e => restorePublicFile = e.target.files[0] || null"
+              />
+              <span class="file-upload-icon">↑</span>
+              <span class="truncate">{{ restorePublicFile ? restorePublicFile.name : 'Click to select public files archive' }}</span>
+            </label>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-6 mb-1.5">
+              Private Files
+              <span class="font-normal text-ink-gray-3 ml-1">(optional, .tar)</span>
+            </label>
+            <label class="file-upload-label" :class="{ 'file-selected': !!restorePrivateFile }">
+              <input
+                type="file"
+                accept=".tar,.tar.gz,.tgz"
+                class="hidden"
+                @change="e => restorePrivateFile = e.target.files[0] || null"
+              />
+              <span class="file-upload-icon">↑</span>
+              <span class="truncate">{{ restorePrivateFile ? restorePrivateFile.name : 'Click to select private files archive' }}</span>
+            </label>
+          </div>
+
+          <p v-if="restoreError" class="text-xs text-ink-red-4">{{ restoreError }}</p>
+
+          <div class="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" size="sm" label="Cancel" @click="showRestoreDialog = false" />
+            <Button
+              type="submit"
+              size="sm"
+              label="Restore Site"
+              :loading="restoreLoading"
+              :disabled="!restoreSqlFile || restoreLoading"
+            />
+          </div>
+        </form>
+
+        <!-- Close button after job completes -->
+        <div v-if="restoreJobId && restoreJobDone" class="flex justify-end pt-1">
+          <Button variant="ghost" size="sm" label="Close" @click="showRestoreDialog = false" />
+        </div>
+      </div>
+    </template>
+  </Dialog>
 </template>
 
 <script setup>
@@ -193,6 +314,7 @@ const emit = defineEmits(['refresh'])
 
 const errorMessage = ref('')
 const siteActions = reactive({})
+const useStates = reactive({})
 const activeJobId = ref(null)
 const activeJobTitle = ref('')
 
@@ -207,12 +329,25 @@ const installLoading = ref(false)
 
 const showDropDialog = ref(false)
 const dropTarget = ref(null)
+const dropRootPassword = ref('')
+const dropError = ref('')
 
 const backupTarget = ref(null)
 const showBackupDialog = ref(false)
 const backupJobId = ref(null)
 const backupJobDone = ref(false)
 const backupFiles = ref([])
+const backupStartedAt = ref(0)
+
+const restoreTarget = ref(null)
+const showRestoreDialog = ref(false)
+const restoreJobId = ref(null)
+const restoreJobDone = ref(false)
+const restoreLoading = ref(false)
+const restoreError = ref('')
+const restoreSqlFile = ref(null)
+const restorePublicFile = ref(null)
+const restorePrivateFile = ref(null)
 
 function openNewSiteDialog() {
   Object.assign(newSite, { site_name: '', admin_password: '', db_name: '', db_root_password: '' })
@@ -239,6 +374,25 @@ async function handleCreateSite() {
     errorMessage.value = e.message
   } finally {
     createLoading.value = false
+  }
+}
+
+async function handleUse(site) {
+  useStates[site.name] = 'using'
+  errorMessage.value = ''
+  try {
+    const res = await fetch(`/api/benches/${props.benchName}/sites/${site.name}/use`, { method: 'POST' })
+    const data = await res.json()
+    if (!data.success) {
+      errorMessage.value = data.error || 'bench use failed'
+      delete useStates[site.name]
+    } else {
+      useStates[site.name] = 'done'
+      setTimeout(() => delete useStates[site.name], 3000)
+    }
+  } catch (e) {
+    errorMessage.value = e.message
+    delete useStates[site.name]
   }
 }
 
@@ -286,27 +440,31 @@ async function handleInstallApp() {
 
 function confirmDrop(site) {
   dropTarget.value = site
+  dropRootPassword.value = ''
+  dropError.value = ''
   showDropDialog.value = true
 }
 
-async function handleDrop(close) {
+async function handleDrop() {
   if (!dropTarget.value) return
   const siteName = dropTarget.value.name
   siteActions[siteName] = 'drop'
-  errorMessage.value = ''
+  dropError.value = ''
   try {
-    const res = await fetch(`/api/benches/${props.benchName}/sites/${siteName}`, { method: 'DELETE' })
+    const params = dropRootPassword.value
+      ? `?root_password=${encodeURIComponent(dropRootPassword.value)}`
+      : ''
+    const res = await fetch(`/api/benches/${props.benchName}/sites/${siteName}${params}`, { method: 'DELETE' })
     const data = await res.json()
     if (!data.success) {
-      errorMessage.value = data.error || 'Drop failed'
+      dropError.value = data.error || 'Drop failed'
     } else {
-      close?.()
       showDropDialog.value = false
       dropTarget.value = null
       emit('refresh')
     }
   } catch (e) {
-    errorMessage.value = e.message
+    dropError.value = e.message
   } finally {
     delete siteActions[siteName]
   }
@@ -321,6 +479,7 @@ function handleBackup(site) {
   backupJobId.value = null
   backupJobDone.value = false
   backupFiles.value = []
+  backupStartedAt.value = Date.now() / 1000 - 2  // 2s buffer for clock skew
   showBackupDialog.value = true
   startBackup(site)
 }
@@ -340,8 +499,46 @@ async function onBackupJobDone() {
   try {
     const res = await fetch(`/api/benches/${props.benchName}/sites/${backupTarget.value.name}/backups`)
     const data = await res.json()
-    backupFiles.value = (data.backups || []).slice(0, 4)
+    backupFiles.value = (data.backups || []).filter(f => f.modified >= backupStartedAt.value)
   } catch (e) {}
+}
+
+function openRestoreDialog(site) {
+  restoreTarget.value = site
+  restoreJobId.value = null
+  restoreJobDone.value = false
+  restoreError.value = ''
+  restoreSqlFile.value = null
+  restorePublicFile.value = null
+  restorePrivateFile.value = null
+  showRestoreDialog.value = true
+}
+
+async function handleRestore() {
+  if (!restoreSqlFile.value) return
+  restoreLoading.value = true
+  restoreError.value = ''
+  try {
+    const body = new FormData()
+    body.append('sql_file', restoreSqlFile.value)
+    if (restorePublicFile.value) body.append('public_file', restorePublicFile.value)
+    if (restorePrivateFile.value) body.append('private_file', restorePrivateFile.value)
+    const res = await fetch(
+      `/api/benches/${props.benchName}/sites/${restoreTarget.value.name}/restore`,
+      { method: 'POST', body },
+    )
+    const data = await res.json()
+    if (!res.ok) { restoreError.value = data.detail || 'Restore failed'; return }
+    restoreJobId.value = data.job_id
+  } catch (e) {
+    restoreError.value = e.message
+  } finally {
+    restoreLoading.value = false
+  }
+}
+
+function onRestoreJobDone() {
+  restoreJobDone.value = true
 }
 
 function formatFileSize(bytes) {
@@ -351,3 +548,35 @@ function formatFileSize(bytes) {
   return (bytes / 1024).toFixed(1) + ' KB'
 }
 </script>
+
+<style scoped>
+.file-upload-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px dashed var(--outline-gray-3);
+  background: var(--surface-gray-1);
+  color: var(--ink-gray-4);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  overflow: hidden;
+}
+.file-upload-label:hover {
+  border-color: var(--outline-gray-4);
+  background: var(--surface-gray-2);
+  color: var(--ink-gray-6);
+}
+.file-upload-label.file-selected {
+  border-color: var(--outline-blue-1);
+  border-style: solid;
+  background: var(--surface-blue-1);
+  color: var(--ink-blue-3);
+}
+.file-upload-icon {
+  flex-shrink: 0;
+  font-size: 0.875rem;
+}
+</style>

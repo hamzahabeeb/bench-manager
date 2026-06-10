@@ -467,7 +467,11 @@ def stop_bench(bench_name: str) -> dict:
     all_ports = _get_redis_ports(bench_path)
     if port:
         all_ports.append(port)
-    for conn in psutil.net_connections(kind="inet"):
+    try:
+        connections = psutil.net_connections(kind="inet")
+    except (psutil.AccessDenied, PermissionError):
+        connections = []
+    for conn in connections:
         try:
             if conn.laddr.port in all_ports and conn.status == "LISTEN" and conn.pid:
                 psutil.Process(conn.pid).kill()
@@ -489,14 +493,62 @@ def create_bench_process(name: str, frappe_branch: str = "version-15") -> subpro
     if target.exists():
         raise ValueError(f"Directory '{name}' already exists in {parent}")
 
-    # Use system bench CLI for init; it uses its own virtualenv internally
+    # target doesn't exist yet so bench_exe falls through to PATH / common locations
+    exe = bench_exe(target)
+
+    # bench init spawns sub-processes that invoke 'bench' by name, so the
+    # directory containing the bench executable must be on PATH.
+    env = os.environ.copy()
+    bench_bin_dir = str(Path(exe).parent)
+    existing_path = env.get("PATH", "")
+    if bench_bin_dir not in existing_path.split(os.pathsep):
+        env["PATH"] = bench_bin_dir + os.pathsep + existing_path
+
     return subprocess.Popen(
-        ["bench", "init", "--frappe-branch", frappe_branch, name],
+        [exe, "init", "--frappe-branch", frappe_branch, name],
         cwd=str(parent),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        env=env,
+    )
+
+
+def build_bench_process(bench_name: str, app: Optional[str] = None, force: bool = False) -> subprocess.Popen:
+    bench_path = Path(settings.bench_root) / bench_name
+    exe = bench_exe(bench_path)
+    cmd = [exe, "build"]
+    if app:
+        cmd += ["--app", app]
+    if force:
+        cmd.append("--force")
+    return subprocess.Popen(
+        cmd,
+        cwd=str(bench_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+
+def bench_exec_process(bench_name: str, command: str) -> subprocess.Popen:
+    bench_path = Path(settings.bench_root) / bench_name
+    env = os.environ.copy()
+    bench_bin = str(bench_path / "env" / "bin")
+    existing_path = env.get("PATH", "")
+    if bench_bin not in existing_path.split(os.pathsep):
+        env["PATH"] = bench_bin + os.pathsep + existing_path
+    return subprocess.Popen(
+        command,
+        shell=True,
+        cwd=str(bench_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        env=env,
     )
 
 

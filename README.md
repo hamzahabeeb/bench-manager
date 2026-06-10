@@ -2,7 +2,7 @@
 
 A lightweight web UI for managing multiple [Frappe](https://frappeframework.com) bench instances on a single server.
 
-![Dashboard](https://raw.githubusercontent.com/your-username/bench-manager/main/docs/screenshot.png)
+![Dashboard](https://raw.githubusercontent.com/hamzahabeeb/bench-manager/main/docs/screenshot.png)
 
 ## Features
 

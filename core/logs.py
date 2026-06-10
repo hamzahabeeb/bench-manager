@@ -38,15 +38,12 @@ async def stream_log(bench_path: Path, log_type: str = "web") -> AsyncGenerator[
 
     log_file = bench_path / rel
     if not log_file.exists():
-        yield f"Log file does not exist yet: {log_file}\n"
-        yield "Waiting for bench to start and create logs...\n"
-        # Poll for up to 60 s
-        for _ in range(60):
-            await asyncio.sleep(1)
+        # Poll silently; EventSource will reconnect when connection closes
+        for _ in range(30):
+            await asyncio.sleep(2)
             if log_file.exists():
                 break
         else:
-            yield "Timed out waiting for log file.\n"
             return
 
     proc = await asyncio.create_subprocess_exec(
