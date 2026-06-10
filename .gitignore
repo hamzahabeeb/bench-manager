@@ -19,3 +19,6 @@ frontend/components.d.ts
 
 # Logs
 *.log
+
+# Rust build artifacts
+rust/target/

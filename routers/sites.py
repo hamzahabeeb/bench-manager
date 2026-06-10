@@ -7,13 +7,17 @@ from config import settings
 from core.bench import is_bench_dir
 from core.logs import register_job
 from core.sites import (
+    add_to_hosts,
     backup_site_process,
+    clear_default_site,
     create_site_process,
     drop_site,
     install_app_process,
+    is_in_hosts,
     list_site_backups,
     list_sites,
     migrate_site_process,
+    remove_from_hosts,
     restore_site_process,
     use_site,
 )
@@ -137,6 +141,39 @@ async def site_restore(
     proc = restore_site_process(bench_path, site_name, sql_path, public_path, private_path)
     job_id = register_job(proc)
     return {"job_id": job_id}
+
+
+@router.get("/{bench_name}/sites/{site_name}/hosts-status")
+async def site_hosts_status(bench_name: str, site_name: str):  # noqa: ARG001
+    _ = bench_name
+    return {"in_hosts": is_in_hosts(site_name)}
+
+
+@router.post("/{bench_name}/sites/{site_name}/add-host")
+async def site_add_host(bench_name: str, site_name: str):  # noqa: ARG001
+    _ = bench_name
+    result = add_to_hosts(site_name)
+    return {
+        "success": result["success"],
+        "error": result.get("error", ""),
+        "sudo_command": result.get("sudo_command", ""),
+    }
+
+
+@router.delete("/{bench_name}/sites/{site_name}/remove-host")
+async def site_remove_host(bench_name: str, site_name: str):  # noqa: ARG001
+    _ = bench_name
+    result = remove_from_hosts(site_name)
+    return {"success": result["success"], "error": result.get("error", "")}
+
+
+@router.post("/{bench_name}/clear-default-site")
+async def bench_clear_default_site(bench_name: str):
+    bench_path = Path(settings.bench_root) / bench_name
+    if not is_bench_dir(bench_path):
+        raise HTTPException(status_code=404, detail="Bench not found")
+    result = clear_default_site(bench_path)
+    return {"success": result["success"], "error": result.get("error", "")}
 
 
 @router.get("/{bench_name}/sites/{site_name}/backups/{filename}")

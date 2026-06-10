@@ -4,14 +4,14 @@ version = "1.0.0"
 description = "Frappe Bench Manager API"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
-    "jinja2>=3.1.0",
-    "python-multipart>=0.0.6",
-    "psutil>=5.9.0",
-    "aiofiles>=23.0.0",
-    "pydantic-settings>=2.0.0",
-    "sse-starlette>=1.6.0",
+  "fastapi>=0.104.0",
+  "uvicorn[standard]>=0.24.0",
+  "jinja2>=3.1.0",
+  "python-multipart>=0.0.6",
+  "psutil>=5.9.0",
+  "aiofiles>=23.0.0",
+  "pydantic-settings>=2.0.0",
+  "sse-starlette>=1.6.0",
 ]
 
 [project.scripts]
@@ -25,27 +25,24 @@ build-backend = "hatchling.build"
 packages = ["."]
 
 [dependency-groups]
-dev = [
-    "pyright>=1.1.410",
-    "ruff>=0.15.16",
-]
+dev = ["pyright>=1.1.410", "ruff>=0.15.16"]
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 120
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
-    "RUF", # ruff-specific
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # isort
+  "B",   # flake8-bugbear
+  "UP",  # pyupgrade
+  "RUF", # ruff-specific
 ]
 ignore = [
-    "B008", # FastAPI uses function calls in default arguments
+  "B008", # FastAPI uses function calls in default arguments
 ]
 
 [tool.ruff.lint.isort]
