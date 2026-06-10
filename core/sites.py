@@ -1,9 +1,8 @@
 import dataclasses
 import json
 import subprocess
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
 
 from core.bench import bench_exe
 
@@ -63,8 +62,8 @@ def create_site_process(
     bench_path: Path,
     site_name: str,
     admin_password: str,
-    db_name: Optional[str] = None,
-    db_root_password: Optional[str] = None,
+    db_name: str | None = None,
+    db_root_password: str | None = None,
 ) -> subprocess.Popen:
     exe = bench_exe(bench_path)
     cmd = [exe, "new-site", site_name, f"--admin-password={admin_password}"]
@@ -83,7 +82,9 @@ def create_site_process(
     )
 
 
-def drop_site(bench_path: Path, site_name: str, force: bool = True, root_password: str = "") -> dict:
+def drop_site(
+    bench_path: Path, site_name: str, force: bool = True, root_password: str = ""
+) -> dict:
     exe = bench_exe(bench_path)
     cmd = [exe, "drop-site", site_name]
     if force:
@@ -133,7 +134,9 @@ def install_app_process(bench_path: Path, site_name: str, app_name: str) -> subp
     )
 
 
-def backup_site_process(bench_path: Path, site_name: str, with_files: bool = False) -> subprocess.Popen:
+def backup_site_process(
+    bench_path: Path, site_name: str, with_files: bool = False
+) -> subprocess.Popen:
     exe = bench_exe(bench_path)
     cmd = [exe, "--site", site_name, "backup"]
     if with_files:
@@ -152,8 +155,8 @@ def restore_site_process(
     bench_path: Path,
     site_name: str,
     sql_file: str,
-    with_public_files: Optional[str] = None,
-    with_private_files: Optional[str] = None,
+    with_public_files: str | None = None,
+    with_private_files: str | None = None,
 ) -> subprocess.Popen:
     exe = bench_exe(bench_path)
     cmd = [exe, "--site", site_name, "restore", sql_file]
@@ -181,9 +184,11 @@ def list_site_backups(bench_path: Path, site_name: str) -> list[dict]:
     for f in files:
         if f.is_file():
             stat = f.stat()
-            result.append({
-                "filename": f.name,
-                "size": stat.st_size,
-                "modified": stat.st_mtime,
-            })
+            result.append(
+                {
+                    "filename": f.name,
+                    "size": stat.st_size,
+                    "modified": stat.st_mtime,
+                }
+            )
     return result

@@ -1,11 +1,9 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException
-from fastapi.responses import JSONResponse
 
 from config import settings
 from core.bench import (
-    BenchInfo,
     _get_port,
     bench_exec_process,
     build_bench_process,
@@ -51,7 +49,6 @@ async def bench_status(bench_name: str):
 
 @router.post("/{bench_name}/start")
 async def bench_start(bench_name: str):
-    bench_path = Path(settings.bench_root) / bench_name
     result = start_bench(bench_name)
     status = "running" if result["success"] else "stopped"
     message = result.get("error", "")
@@ -78,7 +75,7 @@ async def bench_create(
         proc = create_bench_process(bench_name, frappe_branch)
         job_id = register_job(proc)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return {"job_id": job_id}
 
 
@@ -119,5 +116,7 @@ async def bench_install_honcho(bench_name: str):
     result = install_honcho(bench_name)
     return {
         "success": result["success"],
-        "message": result.get("error", "honcho installed successfully") if not result["success"] else "honcho installed successfully",
+        "message": result.get("error", "honcho installed successfully")
+        if not result["success"]
+        else "honcho installed successfully",
     }
