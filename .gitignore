@@ -19,3 +19,8 @@ frontend/components.d.ts
 
 # Logs
 *.log
+
+# PyInstaller / installers
+dist/
+installer/
+*.spec.bak
