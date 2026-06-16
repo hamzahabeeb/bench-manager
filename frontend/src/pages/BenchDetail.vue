@@ -128,7 +128,17 @@
 
         <!-- Sites tab -->
         <div v-show="activeTab === 'sites'">
-          <SiteList :bench-name="bench.name" :sites="sites" @refresh="fetchBench" />
+          <div class="flex justify-end mb-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              label="Clear Default & Restart"
+              :loading="actionLoading === 'clear-restart'"
+              :disabled="!!actionLoading"
+              @click="handleClearAndRestart"
+            />
+          </div>
+          <SiteList :bench-name="bench.name" :sites="sites" :bench-port="bench.port" @refresh="fetchBench" />
         </div>
 
         <!-- Apps tab -->
@@ -289,6 +299,25 @@ async function handleInstallHoncho() {
     } else {
       actionError.value = data.message || 'Install failed'
     }
+  } catch (e) {
+    actionError.value = e.message
+  } finally {
+    actionLoading.value = null
+  }
+}
+
+async function handleClearAndRestart() {
+  actionLoading.value = 'clear-restart'
+  actionError.value = ''
+  missingHoncho.value = false
+  try {
+    const res = await fetch(`/api/benches/${props.name}/clear-and-restart`, { method: 'POST' })
+    const data = await res.json()
+    if (!data.success) {
+      actionError.value = data.message || 'Restart failed'
+      missingHoncho.value = data.missing_honcho || false
+    }
+    await fetchBench()
   } catch (e) {
     actionError.value = e.message
   } finally {

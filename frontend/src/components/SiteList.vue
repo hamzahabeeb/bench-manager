@@ -27,7 +27,13 @@
         :key="site.name"
         class="grid grid-cols-[2fr_2fr_2fr_auto] gap-4 px-4 py-3 items-center border-t border-outline-gray-2 hover:bg-surface-gray-1 transition-colors"
       >
-        <span class="font-mono text-sm text-ink-gray-7">{{ site.name }}</span>
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-sm text-ink-gray-7">{{ site.name }}</span>
+          <span
+            v-if="hostsStatus[site.name]"
+            class="px-1.5 py-0.5 rounded text-xs font-medium bg-surface-green-1 text-ink-green-3 border border-outline-green-1"
+          >in hosts</span>
+        </div>
         <span class="flex flex-wrap gap-1">
           <span
             v-for="app in site.installed_apps"
@@ -41,6 +47,22 @@
           <span v-if="site.db_type" class="text-ink-gray-3">({{ site.db_type }})</span>
         </span>
         <div class="flex justify-end gap-1.5">
+          <Button
+            v-if="benchPort"
+            variant="ghost"
+            size="sm"
+            label="Open"
+            :disabled="!!siteActions[site.name]"
+            @click="openSite(site)"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            :label="hostsStatus[site.name] ? 'Remove Host' : 'Add Host'"
+            :loading="hostActions[site.name]"
+            :disabled="!!siteActions[site.name] || hostActions[site.name]"
+            @click="toggleHost(site)"
+          />
           <Button
             variant="ghost"
             size="sm"
@@ -92,7 +114,16 @@
     </div>
 
     <!-- Error message -->
-    <p v-if="errorMessage" class="text-xs text-ink-red-4 mt-3">{{ errorMessage }}</p>
+    <div v-if="errorMessage" class="mt-3 flex flex-col gap-1.5">
+      <p class="text-xs text-ink-red-4">{{ errorMessage }}</p>
+      <div v-if="sudoCommand" class="flex items-center gap-2 px-3 py-2 rounded border border-outline-gray-2 bg-surface-gray-1">
+        <code class="text-xs text-ink-gray-6 font-mono flex-1 truncate">{{ sudoCommand }}</code>
+        <button
+          class="text-xs text-ink-blue-3 hover:text-ink-blue-4 shrink-0 transition-colors"
+          @click="copySudoCommand"
+        >{{ copyLabel }}</button>
+      </div>
+    </div>
 
     <!-- Job output (migrate / install-app) -->
     <div v-if="activeJobId" class="mt-4">
@@ -301,16 +332,74 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { Button, Dialog, FormControl } from 'frappe-ui'
 import JobOutput from './JobOutput.vue'
 
 const props = defineProps({
   benchName: { type: String, required: true },
   sites: { type: Array, default: () => [] },
+  benchPort: { type: Number, default: 0 },
 })
 
 const emit = defineEmits(['refresh'])
+
+const hostsStatus = reactive({})
+const hostActions = reactive({})
+
+async function fetchHostsStatus() {
+  for (const site of props.sites) {
+    try {
+      const res = await fetch(`/api/benches/${props.benchName}/sites/${site.name}/hosts-status`)
+      const data = await res.json()
+      hostsStatus[site.name] = data.in_hosts
+    } catch {}
+  }
+}
+
+const sudoCommand = ref('')
+
+async function toggleHost(site) {
+  hostActions[site.name] = true
+  errorMessage.value = ''
+  sudoCommand.value = ''
+  try {
+    const method = hostsStatus[site.name] ? 'DELETE' : 'POST'
+    const endpoint = hostsStatus[site.name] ? 'remove-host' : 'add-host'
+    const res = await fetch(`/api/benches/${props.benchName}/sites/${site.name}/${endpoint}`, { method })
+    const data = await res.json()
+    if (!data.success) {
+      errorMessage.value = data.error || 'Failed to update /etc/hosts'
+      sudoCommand.value = data.sudo_command || ''
+    } else {
+      hostsStatus[site.name] = !hostsStatus[site.name]
+    }
+  } catch (e) {
+    errorMessage.value = e.message
+  } finally {
+    delete hostActions[site.name]
+  }
+}
+
+function openSite(site) {
+  window.open(`http://${site.name}:${props.benchPort}`, '_blank')
+}
+
+const copyLabel = ref('Copy')
+async function copySudoCommand() {
+  if (!sudoCommand.value) return
+  try {
+    await navigator.clipboard.writeText(sudoCommand.value)
+    copyLabel.value = 'Copied!'
+    setTimeout(() => { copyLabel.value = 'Copy' }, 2000)
+  } catch {
+    copyLabel.value = 'Failed'
+    setTimeout(() => { copyLabel.value = 'Copy' }, 2000)
+  }
+}
+
+onMounted(fetchHostsStatus)
+watch(() => props.sites, fetchHostsStatus, { deep: true })
 
 const errorMessage = ref('')
 const siteActions = reactive({})

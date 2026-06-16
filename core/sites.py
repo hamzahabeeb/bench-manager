@@ -1,5 +1,8 @@
 import dataclasses
 import json
+import platform
+import re
+import shlex
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -172,6 +175,82 @@ def restore_site_process(
         text=True,
         bufsize=1,
     )
+
+
+def _validate_site_name(site_name: str) -> str:
+    name = site_name.strip().lower()
+    name = re.sub(r"[^a-z0-9\-.]", "", name)
+    if not name:
+        raise ValueError(f"Invalid site name: {site_name!r}")
+    return name
+
+
+def is_in_hosts(site_name: str) -> bool:
+    try:
+        for line in Path("/etc/hosts").read_text().splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] in ("127.0.0.1", "::1") and site_name in parts[1:]:
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def add_to_hosts(site_name: str) -> dict:
+    try:
+        site_name = _validate_site_name(site_name)
+        if is_in_hosts(site_name):
+            return {"success": True, "already_exists": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+    hosts_entry = f"\n127.0.0.1\t{site_name}\n::1\t{site_name}\n"
+    result = subprocess.run(
+        ["sudo", "-n", "tee", "-a", "/etc/hosts"],
+        input=hosts_entry,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return {"success": True}
+    quoted = shlex.quote(site_name)
+    sudo_cmd = f"printf '\\n127.0.0.1\\t{quoted}\\n::1\\t{quoted}\\n' | sudo tee -a /etc/hosts > /dev/null"
+    return {
+        "success": False,
+        "error": "Add to hosts requires superuser access. Run the command below in a terminal.",
+        "sudo_command": sudo_cmd,
+    }
+
+
+def remove_from_hosts(site_name: str) -> dict:
+    try:
+        site_name = _validate_site_name(site_name)
+        if not is_in_hosts(site_name):
+            return {"success": True, "not_found": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+    pattern = re.escape(site_name)
+    sed_pattern = f"/^(127\\.0\\.0\\.1|::1)[[:space:]]+{pattern}([[:space:]]|$)/d"
+    if platform.system() == "Darwin":
+        cmd = ["sudo", "-n", "sed", "-i", "", "-E", sed_pattern, "/etc/hosts"]
+    else:
+        cmd = ["sudo", "-n", "sed", "-i", "-E", sed_pattern, "/etc/hosts"]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        return {"success": True}
+    return {"success": False, "error": result.stderr.strip() or "sed failed"}
+
+
+def clear_default_site(bench_path: Path) -> dict:
+    currentsite = bench_path / "sites" / "currentsite"
+    try:
+        if currentsite.exists():
+            currentsite.unlink()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 def list_site_backups(bench_path: Path, site_name: str) -> list[dict]:

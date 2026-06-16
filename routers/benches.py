@@ -18,7 +18,7 @@ from core.bench import (
     stop_bench,
 )
 from core.logs import register_job
-from core.sites import list_sites
+from core.sites import clear_default_site, list_sites
 
 router = APIRouter(prefix="/api/benches", tags=["benches"])
 
@@ -109,6 +109,24 @@ async def bench_build(
     proc = build_bench_process(bench_name, app=app or None, force=force)
     job_id = register_job(proc)
     return {"job_id": job_id}
+
+
+@router.post("/{bench_name}/clear-and-restart")
+async def bench_clear_and_restart(bench_name: str):
+    bench_path = Path(settings.bench_root) / bench_name
+    if not is_bench_dir(bench_path):
+        raise HTTPException(status_code=404, detail="Bench not found")
+    clear_result = clear_default_site(bench_path)
+    if not clear_result["success"]:
+        raise HTTPException(status_code=500, detail=clear_result.get("error", "Failed to clear default site"))
+    stop_bench(bench_name)
+    start_result = start_bench(bench_name)
+    return {
+        "success": start_result["success"],
+        "status": "running" if start_result["success"] else "stopped",
+        "message": start_result.get("error", ""),
+        "missing_honcho": start_result.get("missing_honcho", False),
+    }
 
 
 @router.post("/{bench_name}/install-honcho")
