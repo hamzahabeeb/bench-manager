@@ -2,7 +2,8 @@
 
 A lightweight web UI for managing multiple [Frappe](https://frappeframework.com) bench instances on a single server.
 
-![Dashboard](https://raw.githubusercontent.com/hamzahabeeb/bench-manager/main/docs/screenshot.png)
+<img width="1456" height="825" alt="image" src="https://github.com/user-attachments/assets/b3857880-867f-4e89-b92c-7588e01647ff" />
+
 
 ## Features
 
@@ -25,11 +26,11 @@ A lightweight web UI for managing multiple [Frappe](https://frappeframework.com)
 ## Quick start
 
 ```bash
-git clone https://github.com/your-username/bench-manager
+git clone https://github.com/hamzahabeeb/bench-manager
 cd bench-manager
 
-# (Optional) copy and edit the config
-cp .env.example .env
+# edit the config (add the folder under which all your benches are present in line with BENCH_MANAGER_BENCH_ROOT)
+nano .env
 
 # Start the server (creates venv and installs deps automatically)
 ./run.sh

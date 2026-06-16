@@ -85,7 +85,9 @@ def create_site_process(
     )
 
 
-def drop_site(bench_path: Path, site_name: str, force: bool = True, root_password: str = "") -> dict:
+def drop_site(
+    bench_path: Path, site_name: str, force: bool = True, root_password: str = ""
+) -> dict:
     exe = bench_exe(bench_path)
     cmd = [exe, "drop-site", site_name]
     if force:
@@ -135,7 +137,9 @@ def install_app_process(bench_path: Path, site_name: str, app_name: str) -> subp
     )
 
 
-def backup_site_process(bench_path: Path, site_name: str, with_files: bool = False) -> subprocess.Popen:
+def backup_site_process(
+    bench_path: Path, site_name: str, with_files: bool = False
+) -> subprocess.Popen:
     exe = bench_exe(bench_path)
     cmd = [exe, "--site", site_name, "backup"]
     if with_files:
